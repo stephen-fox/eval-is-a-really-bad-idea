@@ -4,13 +4,13 @@
 #     This script presents a basic "API" that is accessible over a network. The
 #     API is supposed to "manage" a text file (G_IMPORTANT_FILE) using rules
 #     defined in the function 'execute_api_call'. This script uses the Bash
-#     'eval' builtin to save a few lines of code. While the script makes some
-#     basic attempts at sanitizing user data, anyone can ultimately exploit
-#     this script to run their own code on the host machine.
+#     'eval' builtin to check if a valid API request has been made. While the
+#     script makes some basic attempts at sanitizing user data, anyone can
+#     ultimately exploit this script to run their own code on the host machine.
 
 # Globals.
 readonly G_LISTENER_LOG='/tmp/listener.log'
-readonly G_API_KEY='/api'
+readonly G_API_KEY=/api/$(date | md5sum | cut -f1 -d' ')
 readonly G_IMPORTANT_FILE='/tmp/file.txt'
 G_LISTENER_PID=''
 G_USER_REQUESTED_SHUTDOWN=1
@@ -34,6 +34,7 @@ launch_listener() {
         G_LISTENER_PID=$!
         echo "[INFO] netcat now listening on port ${port} as" \
             "PID ${G_LISTENER_PID}"
+        echo "[INFO] Make API calls to '<server-address>:${port}${G_API_KEY}'"
     else
         echo '[ERROR] Failed to create listener log file'
         shutdown
@@ -46,7 +47,6 @@ launch_listener() {
 parse_incoming_data() {
     local parsedCount=0
     local lastParsedLine=0
-    local in=''
 
     # While the listner is running, try to parse input.
     while [ -d /proc/${G_LISTENER_PID} ]; do
@@ -60,22 +60,12 @@ parse_incoming_data() {
                 && [ ${parsedLineCount} -le ${lastParsedLine} ] && continue
             lastParsedLine=${parsedLineCount}
 
-            # The following logic attempts to remove unsantized input by using
-            # 'grep' and 'cut'. Unfortunately, the usage of 'eval' here means
-            # that code can be injected into the 'line' variable by an external
-            # user. The code is then re-interpreted by Bash. While using double
-            # quotes around the value of the 'in' variable would catch most
-            # cases - I think it is just safer to split this code out into a few
-            # lines and not use 'eval' at all.
-            # My point is, while this is a neat hack to save a few lines, it is
-            # not worth the trade off.
-            if eval in=$(echo "${line}" | grep ${G_API_KEY} | cut -f2 -d' ') \
-                && [ -n "${in}" ]
-            then
-                execute_api_call "${in}"
-            fi
+            # The following logic attempts to check if the line is a HTTP 'GET'
+            # request. Unfortunately, the usage of 'eval' here means that code
+            # can be injected into the 'line' variable by an external user.
+            eval echo "${line}" | grep -w "GET ${G_API_KEY}" \
+                && execute_api_call "${line}"
         done < "${G_LISTENER_LOG}"
-
     done
 
     [ ${G_USER_REQUESTED_SHUTDOWN} -ne 0 ] \
@@ -85,7 +75,9 @@ parse_incoming_data() {
 # execute_api_call <CALL>
 # Attempts to execute an API call. The call is validated against a rule set.
 execute_api_call() {
-    local call=${1}
+    echo "Got data ${1}"
+    local call=$(cut -f2 -d' ' <<< "${1}")
+    echo "Got call ${call}"
     local command=${call##*${G_API_KEY}/}
 
     echo "Received API call: '${call}'"
@@ -93,11 +85,11 @@ execute_api_call() {
     case "${command}" in
         'update' )
             echo '[INFO] Updating file...'
-            echo "Updated on $(date)" >> ${G_IMPORTANT_FILE}
+            echo "Updated on $(date)" >> "${G_IMPORTANT_FILE}"
             ;;
         'delete' )
             echo '[INFO] Removing file...'
-            [ -f "${G_IMPORTANT_FILE}" ] && rm /tmp/file.txt
+            [ -f "${G_IMPORTANT_FILE}" ] && rm "${G_IMPORTANT_FILE}"
             ;;
         * )
             echo "[WARN] Unknown command '${command}' for API call: '${call}'"
