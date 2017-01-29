@@ -75,9 +75,7 @@ parse_incoming_data() {
 # execute_api_call <CALL>
 # Attempts to execute an API call. The call is validated against a rule set.
 execute_api_call() {
-    echo "Got data ${1}"
     local call=$(cut -f2 -d' ' <<< "${1}")
-    echo "Got call ${call}"
     local command=${call##*${G_API_KEY}/}
 
     echo "Received API call: '${call}'"
