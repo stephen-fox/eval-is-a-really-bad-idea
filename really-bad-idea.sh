@@ -82,7 +82,7 @@ execute_api_call() {
     local call=$(cut -f2 -d' ' <<< "${1}")
     local command=${call##*${G_API_KEY}/}
 
-    echo "Received API call: '${call}'"
+    echo "[INFO] Received API call: '${call}'"
 
     case "${command}" in
         'update' )
