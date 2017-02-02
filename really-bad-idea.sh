@@ -4,9 +4,10 @@
 #     This script presents a basic "API" that is accessible over a network. The
 #     API is supposed to "manage" a text file (G_IMPORTANT_FILE) using rules
 #     defined in the function 'execute_api_call'. This script uses the Bash
-#     'eval' builtin to check if a valid API request has been made. While the
-#     script makes some basic attempts at sanitizing user data, anyone can
-#     ultimately exploit this script to run their own code on the host machine.
+#     'eval' builtin to check if a valid API request has been made. The script
+#     makes no real attempts at sanitizing user input before giving it to
+#     'evel', anyone can ultimately exploit this script to run their own code on
+#     the host machine.
 
 # Globals.
 readonly G_LISTENER_LOG='/tmp/listener.log'
@@ -60,10 +61,13 @@ parse_incoming_data() {
                 && [ ${parsedLineCount} -le ${lastParsedLine} ] && continue
             lastParsedLine=${parsedLineCount}
 
-            # The following logic attempts to check if the line is a HTTP 'GET'
-            # request. Unfortunately, the usage of 'eval' here means that code
-            # can be injected into the 'line' variable by an external user.
-            eval echo "${line}" | grep -w "GET ${G_API_KEY}" \
+            # The following logic attempts to check if the line contains a good
+            # API key. It tries to save a few lines by declaring a 'local'
+            # variable and referencing it in a single statement. Unfortunately,
+            # the usage of 'eval' here means that code can be injected into the
+            # 'line' variable by an external user.
+            eval local key="$(echo "${line}" | cut -f2 -d' ')" \
+                && [ "${key%/*}" == "${G_API_KEY}" ] \
                 && execute_api_call "${line}"
         done < "${G_LISTENER_LOG}"
     done
